@@ -1,53 +1,54 @@
 #!/usr/bin/env groovy
 
 /**
- * Update Kubernetes manifests with new image tags
+ * Update Kubernetes manifests with new image tags for QBShop
  */
 def call(Map config = [:]) {
+
     def imageTag = config.imageTag ?: error("Image tag is required")
     def manifestsPath = config.manifestsPath ?: 'kubernetes'
     def gitCredentials = config.gitCredentials ?: 'github-credentials'
     def gitUserName = config.gitUserName ?: 'Jenkins CI'
-    def gitUserEmail = config.gitUserEmail ?: 'jenkins@example.com'
-    
+    def gitUserEmail = config.gitUserEmail ?: 'jenkins@ci.local'
+
     echo "Updating Kubernetes manifests with image tag: ${imageTag}"
-    
-    withCredentials([usernamePassword(
-        credentialsId: gitCredentials,
-        usernameVariable: 'GIT_USERNAME',
-        passwordVariable: 'GIT_PASSWORD'
-    )]) {
+
+    withCredentials([
+        usernamePassword(
+            credentialsId: gitCredentials,
+            usernameVariable: 'GIT_USERNAME',
+            passwordVariable: 'GIT_PASSWORD'
+        )
+    ]) {
+
         // Configure Git
         sh """
             git config user.name "${gitUserName}"
             git config user.email "${gitUserEmail}"
         """
-        
-        // Update deployment manifests with new image tags - using proper Linux sed syntax
+
         sh """
-            # Update main application deployment - note the correct image name is satyamsri/easyshop-app
-            sed -i "s|image: satyamsri/easyshop-app:.*|image: satyamsri/easyshop-app:${imageTag}|g" ${manifestsPath}/08-easyshop-deployment.yaml
-            
-            # Update migration job if it exists
+            # Update main QBShop application deployment
+            sed -i "s|image: satyamsri/qbshop-app:.*|image: satyamsri/qbshop-app:${imageTag}|g" ${manifestsPath}/08-qbshop-deployment.yaml
+
+            # Update migration job if present
             if [ -f "${manifestsPath}/12-migration-job.yaml" ]; then
-                sed -i "s|image: satyamsri/easyshop-migration:.*|image: satyamsri/easyshop-migration:${imageTag}|g" ${manifestsPath}/12-migration-job.yaml
+                sed -i "s|image: satyamsri/qbshop-migration:.*|image: satyamsri/qbshop-migration:${imageTag}|g" ${manifestsPath}/12-migration-job.yaml
             fi
-            
-            # Ensure ingress is using the correct domain
+
+            # Update Ingress host to asriv.shop
             if [ -f "${manifestsPath}/10-ingress.yaml" ]; then
-                sed -i "s|host: .*|host: easyshop.letsdeployit.com|g" ${manifestsPath}/10-ingress.yaml
+                sed -i "s|host: .*|host: asriv.shop|g" ${manifestsPath}/10-ingress.yaml
             fi
-            
-            # Check for changes
+
+            # Check if changes occurred
             if git diff --quiet; then
                 echo "No changes to commit"
             else
-                # Commit and push changes
                 git add ${manifestsPath}/*.yaml
-                git commit -m "Update image tags to ${imageTag} and ensure correct domain [ci skip]"
-                
-                # Set up credentials for push
-                git remote set-url origin https://\${GIT_USERNAME}:\${GIT_PASSWORD}@github.com/Satyams-git/Qualibytes-Ecommerce.git
+                git commit -m "Update QBShop image tags to ${imageTag} and hostname to asriv.shop [ci skip]"
+
+                git remote set-url origin https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/Satyams-git/Qualibytes-Ecommerce.git
                 git push origin HEAD:\${GIT_BRANCH}
             fi
         """
